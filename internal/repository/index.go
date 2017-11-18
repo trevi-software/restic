@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -456,9 +457,13 @@ func isErrOldIndex(err error) bool {
 // DecodeIndex loads and unserializes an index from rd.
 func DecodeIndex(buf []byte) (idx *Index, err error) {
 	debug.Log("Start decoding index")
-	idxJSON := &jsonIndex{}
 
-	err = json.Unmarshal(buf, idxJSON)
+	// idxJSON := &jsonIndex{}
+
+	// err = json.Unmarshal(buf, idxJSON)
+
+	js := NewJsonStreamer(bytes.NewReader(buf))
+	idxJSON, err := js.LoadIndex()
 	if err != nil {
 		return nil, errors.Wrap(err, "Decode")
 	}
