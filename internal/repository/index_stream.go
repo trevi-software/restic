@@ -12,22 +12,22 @@ import (
 // loads an Index from a stream of JSON text. Index is built gradually so that the entire JSON string
 // does not need to be read into RAM all at once.
 type indexJsonStreamer struct {
-	rd      io.Reader
-	idxJson *jsonIndex
-	dec     *json.Decoder
-	token   json.Token
-	err     error
+	rd    io.Reader
+	idx   *Index
+	dec   *json.Decoder
+	token json.Token
+	err   error
 }
 
 func NewJsonStreamer(rd io.Reader) *indexJsonStreamer {
 	return &indexJsonStreamer{
-		rd:      rd,
-		idxJson: &jsonIndex{},
-		dec:     json.NewDecoder(rd)}
+		rd:  rd,
+		idx: NewIndex(),
+		dec: json.NewDecoder(rd)}
 }
 
 // build an Index gradually by processing one token at a time from the underlying json stream.
-func (j *indexJsonStreamer) LoadIndex() (*jsonIndex, error) {
+func (j *indexJsonStreamer) LoadIndex() (*Index, error) {
 	debug.Log("Start decoding index streaming")
 
 	// opening bracket
@@ -48,7 +48,7 @@ func (j *indexJsonStreamer) LoadIndex() (*jsonIndex, error) {
 				j.decodeNextValue(&id)
 				supercedes = append(supercedes, id)
 			}
-			j.idxJson.Supersedes = supercedes
+			j.idx.supersedes = supercedes
 
 			// close bracket
 			j.readBracket()
@@ -60,7 +60,31 @@ func (j *indexJsonStreamer) LoadIndex() (*jsonIndex, error) {
 			for j.hasMore() {
 				var pack packJSON
 				j.decodeNextValue(&pack)
-				j.idxJson.Packs = append(j.idxJson.Packs, &pack)
+
+				var data, tree bool
+
+				for _, blob := range pack.Blobs {
+					j.idx.store(restic.PackedBlob{
+						Blob: restic.Blob{
+							Type:   blob.Type,
+							ID:     blob.ID,
+							Offset: blob.Offset,
+							Length: blob.Length,
+						},
+						PackID: pack.ID,
+					})
+
+					switch blob.Type {
+					case restic.DataBlob:
+						data = true
+					case restic.TreeBlob:
+						tree = true
+					}
+				}
+
+				if !data && tree {
+					j.idx.treePacks = append(j.idx.treePacks, pack.ID)
+				}
 			}
 
 			// close bracket
@@ -73,8 +97,9 @@ func (j *indexJsonStreamer) LoadIndex() (*jsonIndex, error) {
 
 	// closing bracket
 	j.readBracket()
+	j.idx.final = true
 
-	return j.idxJson, j.err
+	return j.idx, j.err
 }
 
 func (j *indexJsonStreamer) readBracket() {

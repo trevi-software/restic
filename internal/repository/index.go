@@ -458,45 +458,11 @@ func isErrOldIndex(err error) bool {
 func DecodeIndex(buf []byte) (idx *Index, err error) {
 	debug.Log("Start decoding index")
 
-	// idxJSON := &jsonIndex{}
-
-	// err = json.Unmarshal(buf, idxJSON)
-
 	js := NewJsonStreamer(bytes.NewReader(buf))
-	idxJSON, err := js.LoadIndex()
+	idx, err = js.LoadIndex()
 	if err != nil {
 		return nil, errors.Wrap(err, "Decode")
 	}
-
-	idx = NewIndex()
-	for _, pack := range idxJSON.Packs {
-		var data, tree bool
-
-		for _, blob := range pack.Blobs {
-			idx.store(restic.PackedBlob{
-				Blob: restic.Blob{
-					Type:   blob.Type,
-					ID:     blob.ID,
-					Offset: blob.Offset,
-					Length: blob.Length,
-				},
-				PackID: pack.ID,
-			})
-
-			switch blob.Type {
-			case restic.DataBlob:
-				data = true
-			case restic.TreeBlob:
-				tree = true
-			}
-		}
-
-		if !data && tree {
-			idx.treePacks = append(idx.treePacks, pack.ID)
-		}
-	}
-	idx.supersedes = idxJSON.Supersedes
-	idx.final = true
 
 	debug.Log("done")
 	return idx, nil
