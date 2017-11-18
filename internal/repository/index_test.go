@@ -228,31 +228,6 @@ var docExample = []byte(`
 }
 `)
 
-var docOldExample = []byte(`
-[ {
-  "id": "73d04e6125cf3c28a299cc2f3cca3b78ceac396e4fcf9575e34536b26782413c",
-  "blobs": [
-	{
-	  "id": "3ec79977ef0cf5de7b08cd12b874cd0f62bbaf7f07f3497a5b1bbcc8cb39b1ce",
-	  "type": "data",
-	  "offset": 0,
-	  "length": 25
-	},{
-	  "id": "9ccb846e60d90d4eb915848add7aa7ea1e4bbabfc60e573db9f7bfb2789afbae",
-	  "type": "tree",
-	  "offset": 38,
-	  "length": 100
-	},
-	{
-	  "id": "d3dc577b4ffd38cc4b32122cabf8655a0223ed22edfd93b353dc0c3f2b0fdf66",
-	  "type": "data",
-	  "offset": 150,
-	  "length": 123
-	}
-  ]
-} ]
-`)
-
 var exampleTests = []struct {
 	id, packID     restic.ID
 	tpe            restic.BlobType
@@ -286,8 +261,6 @@ var exampleLookupTest = struct {
 }
 
 func TestIndexUnserialize(t *testing.T) {
-	oldIdx := restic.IDs{restic.TestParseID("ed54ae36197f4745ebc4b54d10e0f623eaaaedd03013eb7ae90df881b7781452")}
-
 	idx, err := repository.DecodeIndex(docExample)
 	rtest.OK(t, err)
 
@@ -307,8 +280,6 @@ func TestIndexUnserialize(t *testing.T) {
 		rtest.Equals(t, test.offset, blob.Offset)
 		rtest.Equals(t, test.length, blob.Length)
 	}
-
-	rtest.Equals(t, oldIdx, idx.Supersedes())
 
 	blobs := idx.ListPack(exampleLookupTest.packID)
 	if len(blobs) != len(exampleLookupTest.blobs) {
@@ -333,28 +304,6 @@ func BenchmarkDecodeIndex(b *testing.B) {
 		_, err := repository.DecodeIndex(docExample)
 		rtest.OK(b, err)
 	}
-}
-
-func TestIndexUnserializeOld(t *testing.T) {
-	idx, err := repository.DecodeOldIndex(docOldExample)
-	rtest.OK(t, err)
-
-	for _, test := range exampleTests {
-		list, err := idx.Lookup(test.id, test.tpe)
-		rtest.OK(t, err)
-
-		if len(list) != 1 {
-			t.Errorf("expected one result for blob %v, got %v: %v", test.id.Str(), len(list), list)
-		}
-		blob := list[0]
-
-		rtest.Equals(t, test.packID, blob.PackID)
-		rtest.Equals(t, test.tpe, blob.Type)
-		rtest.Equals(t, test.offset, blob.Offset)
-		rtest.Equals(t, test.length, blob.Length)
-	}
-
-	rtest.Equals(t, 0, len(idx.Supersedes()))
 }
 
 func TestIndexPacks(t *testing.T) {

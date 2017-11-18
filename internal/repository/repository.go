@@ -459,21 +459,6 @@ func (r *Repository) LoadIndex(ctx context.Context) error {
 	return nil
 }
 
-// LoadIndex loads the index id from backend and returns it.
-func LoadIndex(ctx context.Context, repo restic.Repository, id restic.ID) (*Index, error) {
-	idx, err := LoadIndexWithDecoder(ctx, repo, id, DecodeIndex)
-	if err == nil {
-		return idx, nil
-	}
-
-	if errors.Cause(err) == ErrOldIndexFormat {
-		fmt.Fprintf(os.Stderr, "index %v has old format\n", id.Str())
-		return LoadIndexWithDecoder(ctx, repo, id, DecodeOldIndex)
-	}
-
-	return nil, err
-}
-
 // SearchKey finds a key with the supplied password, afterwards the config is
 // read and parsed. It tries at most maxKeys key files in the repo.
 func (r *Repository) SearchKey(ctx context.Context, password string, maxKeys int) error {

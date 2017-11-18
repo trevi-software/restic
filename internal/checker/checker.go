@@ -88,14 +88,7 @@ func (c *Checker) LoadIndex(ctx context.Context) (hints []error, errs []error) {
 
 	worker := func(ctx context.Context, id restic.ID) error {
 		debug.Log("worker got index %v", id)
-		idx, err := repository.LoadIndexWithDecoder(ctx, c.repo, id, repository.DecodeIndex)
-		if errors.Cause(err) == repository.ErrOldIndexFormat {
-			debug.Log("index %v has old format", id.Str())
-			hints = append(hints, ErrOldIndexFormat{id})
-
-			idx, err = repository.LoadIndexWithDecoder(ctx, c.repo, id, repository.DecodeOldIndex)
-		}
-
+		idx, err := repository.LoadIndex(ctx, c.repo, id)
 		err = errors.Wrapf(err, "error loading index %v", id.Str())
 
 		select {

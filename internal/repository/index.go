@@ -453,9 +453,6 @@ func isErrOldIndex(err error) bool {
 	return false
 }
 
-// ErrOldIndexFormat means an index with the old format was detected.
-var ErrOldIndexFormat = errors.New("index has old format")
-
 // DecodeIndex loads and unserializes an index from rd.
 func DecodeIndex(buf []byte) (idx *Index, err error) {
 	debug.Log("Start decoding index")
@@ -463,13 +460,6 @@ func DecodeIndex(buf []byte) (idx *Index, err error) {
 
 	err = json.Unmarshal(buf, idxJSON)
 	if err != nil {
-		debug.Log("Error %v", err)
-
-		if isErrOldIndex(err) {
-			debug.Log("index is probably old format, trying that")
-			err = ErrOldIndexFormat
-		}
-
 		return nil, errors.Wrap(err, "Decode")
 	}
 
@@ -507,52 +497,8 @@ func DecodeIndex(buf []byte) (idx *Index, err error) {
 	return idx, nil
 }
 
-// DecodeOldIndex loads and unserializes an index in the old format from rd.
-func DecodeOldIndex(buf []byte) (idx *Index, err error) {
-	debug.Log("Start decoding old index")
-	list := []*packJSON{}
-
-	err = json.Unmarshal(buf, &list)
-	if err != nil {
-		debug.Log("Error %#v", err)
-		return nil, errors.Wrap(err, "Decode")
-	}
-
-	idx = NewIndex()
-	for _, pack := range list {
-		var data, tree bool
-
-		for _, blob := range pack.Blobs {
-			idx.store(restic.PackedBlob{
-				Blob: restic.Blob{
-					Type:   blob.Type,
-					ID:     blob.ID,
-					Offset: blob.Offset,
-					Length: blob.Length,
-				},
-				PackID: pack.ID,
-			})
-
-			switch blob.Type {
-			case restic.DataBlob:
-				data = true
-			case restic.TreeBlob:
-				tree = true
-			}
-		}
-
-		if !data && tree {
-			idx.treePacks = append(idx.treePacks, pack.ID)
-		}
-	}
-	idx.final = true
-
-	debug.Log("done")
-	return idx, nil
-}
-
-// LoadIndexWithDecoder loads the index and decodes it with fn.
-func LoadIndexWithDecoder(ctx context.Context, repo restic.Repository, id restic.ID, fn func([]byte) (*Index, error)) (idx *Index, err error) {
+// LoadIndex loads the index id from backend and returns it.
+func LoadIndex(ctx context.Context, repo restic.Repository, id restic.ID) (*Index, error) {
 	debug.Log("Loading index %v", id.Str())
 
 	buf, err := repo.LoadAndDecrypt(ctx, restic.IndexFile, id)
@@ -560,13 +506,12 @@ func LoadIndexWithDecoder(ctx context.Context, repo restic.Repository, id restic
 		return nil, err
 	}
 
-	idx, err = fn(buf)
+	idx, err := DecodeIndex(buf)
 	if err != nil {
 		debug.Log("error while decoding index %v: %v", id, err)
 		return nil, err
 	}
 
 	idx.id = id
-
 	return idx, nil
 }
