@@ -131,7 +131,12 @@ func (arch *NewArchiver) saveTree(ctx context.Context, prefix string, fi os.File
 	for _, fi := range entries {
 		pathname := filepath.Join(dir, fi.Name())
 
-		if !arch.Select(pathname, fi) {
+		abspathname, err := filepath.Abs(pathname)
+		if err != nil {
+			return nil, err
+		}
+
+		if !arch.Select(abspathname, fi) {
 			debug.Log("% is excluded", pathname)
 			continue
 		}
@@ -199,8 +204,14 @@ func (arch *NewArchiver) Save(ctx context.Context, prefix, target string) (node 
 		return nil, err
 	}
 
-	if !arch.Select(target, fi) {
+	abstarget, err := filepath.Abs(target)
+	if err != nil {
+		return nil, err
+	}
+
+	if !arch.Select(abstarget, fi) {
 		debug.Log("%v is excluded", target)
+		return nil, nil
 	}
 
 	switch {
@@ -228,6 +239,11 @@ func (arch *NewArchiver) saveArchiveTree(ctx context.Context, prefix string, atr
 			node, err := arch.Save(ctx, path.Join(prefix, name), subatree.Path)
 			if err != nil {
 				return nil, err
+			}
+
+			if node == nil {
+				debug.Log("%v excluded: %v", prefix, name)
+				continue
 			}
 
 			node.Name = name

@@ -503,6 +503,41 @@ func TestNewArchiverSnapshotSelect(t *testing.T) {
 		selFn SelectFunc
 	}{
 		{
+			name: "include-all",
+			src: TestDir{
+				"work": TestDir{
+					"foo":     TestFile{Content: "foo"},
+					"foo.txt": TestFile{Content: "foo text file"},
+					"subdir": TestDir{
+						"other":   TestFile{Content: "other in subdir"},
+						"bar.txt": TestFile{Content: "bar.txt in subdir"},
+					},
+				},
+				"other": TestFile{Content: "another file"},
+			},
+			selFn: func(item string, fi os.FileInfo) bool {
+				return true
+			},
+		},
+		{
+			name: "exclude-all",
+			src: TestDir{
+				"work": TestDir{
+					"foo":     TestFile{Content: "foo"},
+					"foo.txt": TestFile{Content: "foo text file"},
+					"subdir": TestDir{
+						"other":   TestFile{Content: "other in subdir"},
+						"bar.txt": TestFile{Content: "bar.txt in subdir"},
+					},
+				},
+				"other": TestFile{Content: "another file"},
+			},
+			selFn: func(item string, fi os.FileInfo) bool {
+				return false
+			},
+			want: TestDir{},
+		},
+		{
 			name: "exclude-txt-files",
 			src: TestDir{
 				"work": TestDir{
@@ -556,6 +591,15 @@ func TestNewArchiverSnapshotSelect(t *testing.T) {
 					return false
 				}
 				return true
+			},
+		},
+		{
+			name: "select-absolute-paths",
+			src: TestDir{
+				"foo": TestFile{Content: "foo"},
+			},
+			selFn: func(item string, fi os.FileInfo) bool {
+				return filepath.IsAbs(item)
 			},
 		},
 	}
