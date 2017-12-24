@@ -15,14 +15,29 @@ import (
 	"github.com/restic/restic/internal/restic"
 )
 
-// NewArchiver saves a directory structure to the repo.
-type NewArchiver struct {
-	repo restic.Repository
-}
-
 // SelectFunc returns true for all items that should be included (files and
 // dirs). If false is returned, files are ignored and dirs are not even walked.
 type SelectFunc func(item string, fi os.FileInfo) bool
+
+// NewArchiver saves a directory structure to the repo.
+type NewArchiver struct {
+	repo   restic.Repository
+	Select SelectFunc
+}
+
+// Valid returns an error if anything is missing.
+func (arch *NewArchiver) Valid() error {
+	if arch.repo == nil {
+		return errors.New("repo is not set")
+	}
+
+	if arch.Select == nil {
+		return errors.New("Select is not set")
+
+	}
+
+	return nil
+}
 
 // SaveFile chunks a file and saves it to the repository.
 func (arch *NewArchiver) SaveFile(ctx context.Context, filename string) (*restic.Node, error) {
@@ -115,6 +130,12 @@ func (arch *NewArchiver) saveTree(ctx context.Context, prefix string, fi os.File
 	tree := restic.NewTree()
 	for _, fi := range entries {
 		pathname := filepath.Join(dir, fi.Name())
+
+		if !arch.Select(pathname, fi) {
+			debug.Log("% is excluded", pathname)
+			continue
+		}
+
 		var node *restic.Node
 		switch {
 		case fs.IsRegularFile(fi):
@@ -176,6 +197,10 @@ func (arch *NewArchiver) Save(ctx context.Context, prefix, target string) (node 
 	fi, err := fs.Lstat(target)
 	if err != nil {
 		return nil, err
+	}
+
+	if !arch.Select(target, fi) {
+		debug.Log("%v is excluded", target)
 	}
 
 	switch {
@@ -303,13 +328,18 @@ func resolveRelativeTargets(targets []string) ([]string, error) {
 
 // Snapshot saves several targets and returns a snapshot.
 func (arch *NewArchiver) Snapshot(ctx context.Context, targets []string) (*restic.Snapshot, restic.ID, error) {
+	err := arch.Valid()
+	if err != nil {
+		return nil, restic.ID{}, err
+	}
+
 	for i, target := range targets {
 		targets[i] = filepath.Clean(target)
 	}
 
 	debug.Log("targets before resolving: %v", targets)
 
-	targets, err := resolveRelativeTargets(targets)
+	targets, err = resolveRelativeTargets(targets)
 	if err != nil {
 		return nil, restic.ID{}, err
 	}

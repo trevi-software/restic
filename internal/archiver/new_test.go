@@ -45,6 +45,9 @@ func TestNewArchiverSaveFile(t *testing.T) {
 
 			arch := NewArchiver{
 				repo: repo,
+				Select: func(string, os.FileInfo) bool {
+					return true
+				},
 			}
 
 			node, err := arch.SaveFile(ctx, filepath.Join(tempdir, "file"))
@@ -167,6 +170,9 @@ func TestNewArchiverSaveDir(t *testing.T) {
 
 			arch := NewArchiver{
 				repo: repo,
+				Select: func(string, os.FileInfo) bool {
+					return true
+				},
 			}
 
 			chdir := tempdir
@@ -452,6 +458,9 @@ func TestNewArchiverSnapshot(t *testing.T) {
 
 			arch := NewArchiver{
 				repo: repo,
+				Select: func(string, os.FileInfo) bool {
+					return true
+				},
 			}
 
 			chdir := tempdir
@@ -468,6 +477,106 @@ func TestNewArchiverSnapshot(t *testing.T) {
 			}
 
 			t.Logf("targets: %v", targets)
+			_, snapshotID, err := arch.Snapshot(ctx, targets)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			t.Logf("saved as %v", snapshotID.Str())
+
+			want := test.want
+			if want == nil {
+				want = test.src
+			}
+			TestEnsureSnapshot(t, repo, snapshotID, want)
+
+			checker.TestCheckRepo(t, repo)
+		})
+	}
+}
+
+func TestNewArchiverSnapshotSelect(t *testing.T) {
+	var tests = []struct {
+		name  string
+		src   TestDir
+		want  TestDir
+		selFn SelectFunc
+	}{
+		{
+			name: "exclude-txt-files",
+			src: TestDir{
+				"work": TestDir{
+					"foo":     TestFile{Content: "foo"},
+					"foo.txt": TestFile{Content: "foo text file"},
+					"subdir": TestDir{
+						"other":   TestFile{Content: "other in subdir"},
+						"bar.txt": TestFile{Content: "bar.txt in subdir"},
+					},
+				},
+				"other": TestFile{Content: "another file"},
+			},
+			want: TestDir{
+				"work": TestDir{
+					"foo": TestFile{Content: "foo"},
+					"subdir": TestDir{
+						"other": TestFile{Content: "other in subdir"},
+					},
+				},
+				"other": TestFile{Content: "another file"},
+			},
+			selFn: func(item string, fi os.FileInfo) bool {
+				if filepath.Ext(item) == ".txt" {
+					return false
+				}
+				return true
+			},
+		},
+		{
+			name: "exclude-dir",
+			src: TestDir{
+				"work": TestDir{
+					"foo":     TestFile{Content: "foo"},
+					"foo.txt": TestFile{Content: "foo text file"},
+					"subdir": TestDir{
+						"other":   TestFile{Content: "other in subdir"},
+						"bar.txt": TestFile{Content: "bar.txt in subdir"},
+					},
+				},
+				"other": TestFile{Content: "another file"},
+			},
+			want: TestDir{
+				"work": TestDir{
+					"foo":     TestFile{Content: "foo"},
+					"foo.txt": TestFile{Content: "foo text file"},
+				},
+				"other": TestFile{Content: "another file"},
+			},
+			selFn: func(item string, fi os.FileInfo) bool {
+				if filepath.Base(item) == "subdir" {
+					return false
+				}
+				return true
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			tempdir, repo, cleanup := prepareTempdirRepoSrc(t, test.src)
+			defer cleanup()
+
+			arch := NewArchiver{
+				repo:   repo,
+				Select: test.selFn,
+			}
+
+			back := fs.TestChdir(t, tempdir)
+			defer back()
+
+			targets := []string{"."}
 			_, snapshotID, err := arch.Snapshot(ctx, targets)
 			if err != nil {
 				t.Fatal(err)
