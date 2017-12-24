@@ -7,6 +7,7 @@ import (
 	"github.com/restic/restic/internal/backend/azure"
 	"github.com/restic/restic/internal/backend/b2"
 	"github.com/restic/restic/internal/backend/gs"
+	"github.com/restic/restic/internal/backend/hubic"
 	"github.com/restic/restic/internal/backend/local"
 	"github.com/restic/restic/internal/backend/rest"
 	"github.com/restic/restic/internal/backend/s3"
@@ -37,6 +38,7 @@ var parsers = []parser{
 	{"gs", gs.ParseConfig},
 	{"azure", azure.ParseConfig},
 	{"swift", swift.ParseConfig},
+	{"hubic", hubic.ParseConfig},
 	{"rest", rest.ParseConfig},
 }
 

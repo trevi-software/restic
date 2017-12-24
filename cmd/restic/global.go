@@ -16,6 +16,7 @@ import (
 	"github.com/restic/restic/internal/backend/azure"
 	"github.com/restic/restic/internal/backend/b2"
 	"github.com/restic/restic/internal/backend/gs"
+	"github.com/restic/restic/internal/backend/hubic"
 	"github.com/restic/restic/internal/backend/local"
 	"github.com/restic/restic/internal/backend/location"
 	"github.com/restic/restic/internal/backend/rest"
@@ -493,6 +494,20 @@ func parseConfig(loc location.Location, opts options.Options) (interface{}, erro
 		debug.Log("opening swift repository at %#v", cfg)
 		return cfg, nil
 
+	case "hubic":
+		cfg := loc.Config.(hubic.Config)
+
+		if err := hubic.ApplyEnvironment("", &cfg); err != nil {
+			return nil, err
+		}
+
+		if err := opts.Apply(loc.Scheme, &cfg); err != nil {
+			return nil, err
+		}
+
+		debug.Log("opening hubic repository at %#v", cfg)
+		return cfg, nil
+
 	case "b2":
 		cfg := loc.Config.(b2.Config)
 
@@ -568,6 +583,8 @@ func open(s string, opts options.Options) (restic.Backend, error) {
 		be, err = b2.Open(globalOptions.ctx, cfg.(b2.Config), rt)
 	case "rest":
 		be, err = rest.Open(cfg.(rest.Config), rt)
+	case "hubic":
+		be, err = hubic.Open(cfg.(hubic.Config), rt)
 
 	default:
 		return nil, errors.Fatalf("invalid backend: %q", loc.Scheme)
@@ -621,6 +638,8 @@ func create(s string, opts options.Options) (restic.Backend, error) {
 		return azure.Create(cfg.(azure.Config), rt)
 	case "swift":
 		return swift.Open(cfg.(swift.Config), rt)
+	case "hubic":
+		return hubic.Open(cfg.(hubic.Config), rt)
 	case "b2":
 		return b2.Create(globalOptions.ctx, cfg.(b2.Config), rt)
 	case "rest":

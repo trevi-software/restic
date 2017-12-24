@@ -55,6 +55,7 @@ func Open(cfg Config, rt http.RoundTripper) (restic.Backend, error) {
 			TrustId:        cfg.TrustID,
 			StorageUrl:     cfg.StorageURL,
 			AuthToken:      cfg.AuthToken,
+			Auth:           cfg.Auth,
 			ConnectTimeout: time.Minute,
 			Timeout:        time.Minute,
 
