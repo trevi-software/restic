@@ -18,6 +18,7 @@ import (
 	"github.com/restic/restic/internal/backend/gs"
 	"github.com/restic/restic/internal/backend/local"
 	"github.com/restic/restic/internal/backend/location"
+	"github.com/restic/restic/internal/backend/onedrive"
 	"github.com/restic/restic/internal/backend/rest"
 	"github.com/restic/restic/internal/backend/s3"
 	"github.com/restic/restic/internal/backend/sftp"
@@ -523,6 +524,15 @@ func parseConfig(loc location.Location, opts options.Options) (interface{}, erro
 
 		debug.Log("opening rest repository at %#v", cfg)
 		return cfg, nil
+
+	case "onedrive":
+		cfg := loc.Config.(onedrive.Config)
+		if err := opts.Apply(loc.Scheme, &cfg); err != nil {
+			return nil, err
+		}
+
+		debug.Log("opening onedrive repository at %#v", cfg)
+		return cfg, nil
 	}
 
 	return nil, errors.Fatalf("invalid backend: %q", loc.Scheme)
@@ -576,6 +586,8 @@ func open(s string, gopts GlobalOptions, opts options.Options) (restic.Backend, 
 		be, err = b2.Open(globalOptions.ctx, cfg.(b2.Config), rt)
 	case "rest":
 		be, err = rest.Open(cfg.(rest.Config), rt)
+	case "onedrive":
+		be, err = onedrive.Open(cfg.(onedrive.Config), rt)
 
 	default:
 		return nil, errors.Fatalf("invalid backend: %q", loc.Scheme)
@@ -637,6 +649,8 @@ func create(s string, opts options.Options) (restic.Backend, error) {
 		return b2.Create(globalOptions.ctx, cfg.(b2.Config), rt)
 	case "rest":
 		return rest.Create(cfg.(rest.Config), rt)
+	case "onedrive":
+		return onedrive.Create(cfg.(onedrive.Config), rt)
 	}
 
 	debug.Log("invalid repository scheme: %v", s)
