@@ -587,7 +587,7 @@ func open(s string, gopts GlobalOptions, opts options.Options) (restic.Backend, 
 	case "rest":
 		be, err = rest.Open(cfg.(rest.Config), rt)
 	case "onedrive":
-		be, err = onedrive.Open(cfg.(onedrive.Config), rt)
+		be, err = onedrive.Open(globalOptions.ctx, cfg.(onedrive.Config), rt)
 
 	default:
 		return nil, errors.Fatalf("invalid backend: %q", loc.Scheme)
@@ -650,7 +650,7 @@ func create(s string, opts options.Options) (restic.Backend, error) {
 	case "rest":
 		return rest.Create(cfg.(rest.Config), rt)
 	case "onedrive":
-		return onedrive.Create(cfg.(onedrive.Config), rt)
+		return onedrive.Create(globalOptions.ctx, cfg.(onedrive.Config), rt)
 	}
 
 	debug.Log("invalid repository scheme: %v", s)
