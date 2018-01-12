@@ -33,20 +33,22 @@ func (rd *eofDetectReader) Read(p []byte) (n int, err error) {
 func (rd *eofDetectReader) Close() error {
 	if !rd.eofSeen {
 		buf, err := ioutil.ReadAll(rd)
-		msg := fmt.Sprintf("body not drained, %d bytes not read", len(buf))
-		if err != nil {
-			msg += fmt.Sprintf(", error: %v", err)
-		}
-
-		if len(buf) > 0 {
-			if len(buf) > 20 {
-				buf = append(buf[:20], []byte("...")...)
+		if err != nil || len(buf) > 0 {
+			msg := fmt.Sprintf("body not drained, %d bytes not read", len(buf))
+			if err != nil {
+				msg += fmt.Sprintf(", error: %v", err)
 			}
-			msg += fmt.Sprintf(", body: %q", buf)
-		}
 
-		fmt.Fprintln(os.Stderr, msg)
-		Log("%s: %+v", msg, errors.New("Close()"))
+			if len(buf) > 0 {
+				if len(buf) > 20 {
+					buf = append(buf[:20], []byte("...")...)
+				}
+				msg += fmt.Sprintf(", body: %q", buf)
+			}
+
+			fmt.Fprintln(os.Stderr, msg)
+			Log("%s: %+v", msg, errors.New("Close()"))
+		}
 	}
 	return rd.rd.Close()
 }
