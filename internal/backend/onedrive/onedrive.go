@@ -418,6 +418,7 @@ type onedriveBackend struct {
 	timeout time.Duration
 
 	backend.Layout
+	restic.DefaultLoaderBackend
 }
 
 // Ensure that *Backend implements restic.Backend.
@@ -506,6 +507,7 @@ func open(ctx context.Context, cfg Config, rt http.RoundTripper, createNew bool)
 		connections: cfg.Connections,
 		timeout:     cfg.Timeout,
 	}
+	be.DefaultLoaderBackend = restic.DefaultLoaderBackend{LoaderBackend: be}
 
 	if createNew {
 		err = be.createFolders(ctx, cfg.Prefix)
@@ -638,11 +640,11 @@ func (be *onedriveBackend) Save(ctx context.Context, f restic.Handle, rd io.Read
 	return onedriveItemUpload(ctx, be.client, be.nakedClient, be.Filename(f), rd, f.Type == restic.ConfigFile)
 }
 
-// Load returns a reader that yields the contents of the file at h at the
+// OpenReader returns a reader that yields the contents of the file at h at the
 // given offset. If length is larger than zero, only a portion of the file
 // is returned. rd must be closed after use. If an error is returned, the
 // ReadCloser must be nil.
-func (be *onedriveBackend) Load(ctx context.Context, f restic.Handle, length int, offset int64) (io.ReadCloser, error) {
+func (be *onedriveBackend) OpenReader(ctx context.Context, f restic.Handle, length int, offset int64) (io.ReadCloser, error) {
 	// TODO boilerplate from rest.go, see if it's still necessary
 	if err := f.Valid(); err != nil {
 		return nil, err
