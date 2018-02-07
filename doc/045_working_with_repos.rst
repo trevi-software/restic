@@ -87,3 +87,29 @@ yield the same error:
     Load indexes
     ciphertext verification failed
 
+By default, ``check`` command does not check data packs integrity. 
+Use ``read-data`` parameter to request check of all data packs:
+
+.. code-block:: console
+
+    $ restic -r /tmp/backup check --read-data
+    load indexes
+    check all packs
+    check snapshots, trees and blobs
+    read all data
+
+Use ``read-data-subset=n,t`` parameter to check subset of data packs, which 
+can be used to spread data pack integrity check over period of time. The 
+parameter takes two values, ``n`` and ``t``. All repository data packs are 
+logically devided in ``t`` roughly equal groups and only packs that belong to
+the group number ``n`` are checked. For example, the following commands will 
+check all repository data packs over 5 separate invocations:
+
+.. code-block:: console
+
+    $ restic -r /tmp/backup check --read-data-subset=1,5
+    $ restic -r /tmp/backup check --read-data-subset=2,5
+    $ restic -r /tmp/backup check --read-data-subset=3,5
+    $ restic -r /tmp/backup check --read-data-subset=4,5
+    $ restic -r /tmp/backup check --read-data-subset=5,5
+
