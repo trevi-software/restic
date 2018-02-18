@@ -32,7 +32,7 @@ func TestReadHeaderEagerLoad(t *testing.T) {
 
 		rd := &countingReaderAt{delegate: bytes.NewReader(buf.Bytes())}
 
-		header, err := readHeader(rd, int64(buf.Len()))
+		header, err := readHeader(rd, int64(buf.Len()), 0)
 		rtest.OK(t, err)
 
 		rtest.Equals(t, expectedHeader, header)
@@ -40,7 +40,7 @@ func TestReadHeaderEagerLoad(t *testing.T) {
 	}
 
 	testReadHeader(1, 1)
-	testReadHeader(eagerEntries-1, 1)
-	testReadHeader(eagerEntries, 1)
-	testReadHeader(eagerEntries+1, 2)
+	testReadHeader(defaultEagerEntries-1, 1)
+	testReadHeader(defaultEagerEntries, 1)
+	testReadHeader(defaultEagerEntries+1, 2)
 }
