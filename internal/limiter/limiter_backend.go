@@ -21,20 +21,32 @@ type rateLimitedBackend struct {
 	limiter Limiter
 }
 
-func (r rateLimitedBackend) Save(ctx context.Context, h restic.Handle, rd io.Reader) error {
-	return r.Backend.Save(ctx, h, r.limiter.Upstream(rd))
-}
-
-func (r rateLimitedBackend) Load(ctx context.Context, h restic.Handle, length int, offset int64) (io.ReadCloser, error) {
-	rc, err := r.Backend.Load(ctx, h, length, offset)
-	if err != nil {
-		return nil, err
+func (r rateLimitedBackend) Save(ctx context.Context, h restic.Handle, rd restic.RewindReader) error {
+	limited := limitedRewindReader{
+		RewindReader: rd,
+		limited:      r.limiter.Upstream(rd),
 	}
 
-	return limitedReadCloser{
-		original: rc,
-		limited:  r.limiter.Downstream(rc),
-	}, nil
+	return r.Backend.Save(ctx, h, limited)
+}
+
+type limitedRewindReader struct {
+	restic.RewindReader
+
+	limited io.Reader
+}
+
+func (l limitedRewindReader) Read(b []byte) (int, error) {
+	return l.limited.Read(b)
+}
+
+func (r rateLimitedBackend) Load(ctx context.Context, h restic.Handle, length int, offset int64, consumer func(rd io.Reader) error) error {
+	return r.Backend.Load(ctx, h, length, offset, func(rd io.Reader) error {
+		lrd := limitedReadCloser{
+			limited: r.limiter.Downstream(rd),
+		}
+		return consumer(lrd)
+	})
 }
 
 type limitedReadCloser struct {
@@ -47,6 +59,9 @@ func (l limitedReadCloser) Read(b []byte) (n int, err error) {
 }
 
 func (l limitedReadCloser) Close() error {
+	if l.original == nil {
+		return nil
+	}
 	return l.original.Close()
 }
 

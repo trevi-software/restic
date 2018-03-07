@@ -3,7 +3,9 @@ package checker_test
 import (
 	"context"
 	"io"
+	"io/ioutil"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -195,7 +197,28 @@ func TestModifiedIndex(t *testing.T) {
 		Type: restic.IndexFile,
 		Name: "90f838b4ac28735fda8644fe6a08dbc742e57aaf81b30977b4fefa357010eafd",
 	}
-	f, err := repo.Backend().Load(context.TODO(), h, 0, 0)
+
+	tmpfile, err := ioutil.TempFile("", "restic-test-mod-index-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := tmpfile.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = os.Remove(tmpfile.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	// read the file from the backend
+	err = repo.Backend().Load(context.TODO(), h, 0, 0, func(rd io.Reader) error {
+		_, err := io.Copy(tmpfile, rd)
+		return err
+	})
 	test.OK(t, err)
 
 	// save the index again with a modified name so that the hash doesn't match
@@ -204,10 +227,16 @@ func TestModifiedIndex(t *testing.T) {
 		Type: restic.IndexFile,
 		Name: "80f838b4ac28735fda8644fe6a08dbc742e57aaf81b30977b4fefa357010eafd",
 	}
-	err = repo.Backend().Save(context.TODO(), h2, f)
-	test.OK(t, err)
 
-	test.OK(t, f.Close())
+	rd, err := restic.NewFileReader(tmpfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = repo.Backend().Save(context.TODO(), h2, rd)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	chkr := checker.New(repo)
 	hints, errs := chkr.LoadIndex(context.TODO())
@@ -262,33 +291,25 @@ type errorBackend struct {
 	ProduceErrors bool
 }
 
-func (b errorBackend) Load(ctx context.Context, h restic.Handle, length int, offset int64) (io.ReadCloser, error) {
-	rd, err := b.Backend.Load(ctx, h, length, offset)
-	if err != nil {
-		return rd, err
-	}
-
-	if b.ProduceErrors {
-		return errorReadCloser{rd}, err
-	}
-
-	return rd, nil
+func (b errorBackend) Load(ctx context.Context, h restic.Handle, length int, offset int64, consumer func(rd io.Reader) error) error {
+	return b.Backend.Load(ctx, h, length, offset, func(rd io.Reader) error {
+		if b.ProduceErrors {
+			return consumer(errorReadCloser{rd})
+		}
+		return consumer(rd)
+	})
 }
 
 type errorReadCloser struct {
-	io.ReadCloser
+	io.Reader
 }
 
 func (erd errorReadCloser) Read(p []byte) (int, error) {
-	n, err := erd.ReadCloser.Read(p)
+	n, err := erd.Reader.Read(p)
 	if n > 0 {
 		induceError(p[:n])
 	}
 	return n, err
-}
-
-func (erd errorReadCloser) Close() error {
-	return erd.ReadCloser.Close()
 }
 
 // induceError flips a bit in the slice.

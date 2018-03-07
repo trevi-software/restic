@@ -28,7 +28,7 @@ func loadAndCompare(t testing.TB, be restic.Backend, h restic.Handle, data []byt
 }
 
 func save(t testing.TB, be restic.Backend, h restic.Handle, data []byte) {
-	err := be.Save(context.TODO(), h, bytes.NewReader(data))
+	err := be.Save(context.TODO(), h, restic.NewByteReader(data))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestBackend(t *testing.T) {
 	// load data via cache
 	loadAndCompare(t, wbe, h, data)
 	if !c.Has(h) {
-		t.Errorf("cache dosen't have file after load")
+		t.Errorf("cache doesn't have file after load")
 	}
 
 	// remove via cache
@@ -83,7 +83,7 @@ func TestBackend(t *testing.T) {
 	// save via cache
 	save(t, wbe, h, data)
 	if !c.Has(h) {
-		t.Errorf("cache dosen't have file after load")
+		t.Errorf("cache doesn't have file after load")
 	}
 
 	// load data directly from backend

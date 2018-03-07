@@ -44,7 +44,11 @@ type ErrAlreadyLocked struct {
 }
 
 func (e ErrAlreadyLocked) Error() string {
-	return fmt.Sprintf("repository is already locked by %v", e.otherLock)
+	s := ""
+	if e.otherLock.Exclusive {
+		s = "exclusively "
+	}
+	return fmt.Sprintf("repository is already locked %sby %v", s, e.otherLock)
 }
 
 // IsAlreadyLocked returns true iff err is an instance of ErrAlreadyLocked.
@@ -134,13 +138,15 @@ func (l *Lock) fillUserInfo() error {
 // non-exclusive lock is to be created, an error is only returned when an
 // exclusive lock is found.
 func (l *Lock) checkForOtherLocks(ctx context.Context) error {
-	return eachLock(ctx, l.repo, func(id ID, lock *Lock, err error) error {
+	return l.repo.List(ctx, LockFile, func(id ID, size int64) error {
 		if l.lockID != nil && id.Equal(*l.lockID) {
 			return nil
 		}
 
-		// ignore locks that cannot be loaded
+		lock, err := LoadLock(ctx, l.repo, id)
 		if err != nil {
+			// ignore locks that cannot be loaded
+			debug.Log("ignore lock %v: %v", id, err)
 			return nil
 		}
 
@@ -154,18 +160,6 @@ func (l *Lock) checkForOtherLocks(ctx context.Context) error {
 
 		return nil
 	})
-}
-
-func eachLock(ctx context.Context, repo Repository, f func(ID, *Lock, error) error) error {
-	for id := range repo.List(ctx, LockFile) {
-		lock, err := LoadLock(ctx, repo, id)
-		err = f(id, lock, err)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // createLock acquires the lock by creating a file in the repository.
@@ -226,7 +220,7 @@ func (l *Lock) Stale() bool {
 // Refresh refreshes the lock by creating a new file in the backend with a new
 // timestamp. Afterwards the old lock is removed.
 func (l *Lock) Refresh(ctx context.Context) error {
-	debug.Log("refreshing lock %v", l.lockID.Str())
+	debug.Log("refreshing lock %v", l.lockID)
 	id, err := l.createLock(ctx)
 	if err != nil {
 		return err
@@ -237,7 +231,7 @@ func (l *Lock) Refresh(ctx context.Context) error {
 		return err
 	}
 
-	debug.Log("new lock ID %v", id.Str())
+	debug.Log("new lock ID %v", id)
 	l.lockID = &id
 
 	return nil
@@ -280,9 +274,11 @@ func LoadLock(ctx context.Context, repo Repository, id ID) (*Lock, error) {
 
 // RemoveStaleLocks deletes all locks detected as stale from the repository.
 func RemoveStaleLocks(ctx context.Context, repo Repository) error {
-	return eachLock(ctx, repo, func(id ID, lock *Lock, err error) error {
-		// ignore locks that cannot be loaded
+	return repo.List(ctx, LockFile, func(id ID, size int64) error {
+		lock, err := LoadLock(ctx, repo, id)
 		if err != nil {
+			// ignore locks that cannot be loaded
+			debug.Log("ignore lock %v: %v", id, err)
 			return nil
 		}
 
@@ -296,7 +292,7 @@ func RemoveStaleLocks(ctx context.Context, repo Repository) error {
 
 // RemoveAllLocks removes all locks forcefully.
 func RemoveAllLocks(ctx context.Context, repo Repository) error {
-	return eachLock(ctx, repo, func(id ID, lock *Lock, err error) error {
+	return repo.List(ctx, LockFile, func(id ID, size int64) error {
 		return repo.Backend().Remove(context.TODO(), Handle{Type: LockFile, Name: id.String()})
 	})
 }

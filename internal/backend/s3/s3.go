@@ -48,6 +48,7 @@ func open(cfg Config, rt http.RoundTripper) (*Backend, error) {
 	// AWS env variables such as AWS_ACCESS_KEY_ID
 	// Minio env variables such as MINIO_ACCESS_KEY
 	creds := credentials.NewChainCredentials([]credentials.Provider{
+		&credentials.EnvAWS{},
 		&credentials.Static{
 			Value: credentials.Value{
 				AccessKeyID:     cfg.KeyID,
@@ -59,7 +60,6 @@ func open(cfg Config, rt http.RoundTripper) (*Backend, error) {
 				Transport: http.DefaultTransport,
 			},
 		},
-		&credentials.EnvAWS{},
 		&credentials.EnvMinio{},
 	})
 	client, err := minio.NewWithCredentials(cfg.Endpoint, creds, !cfg.UseHTTP, "")
@@ -104,6 +104,12 @@ func Create(cfg Config, rt http.RoundTripper) (restic.Backend, error) {
 		return nil, errors.Wrap(err, "open")
 	}
 	found, err := be.client.BucketExists(cfg.Bucket)
+
+	if err != nil && be.IsAccessDenied(err) {
+		err = nil
+		found = true
+	}
+
 	if err != nil {
 		debug.Log("BucketExists(%v) returned err %v", cfg.Bucket, err)
 		return nil, errors.Wrap(err, "client.BucketExists")
@@ -118,6 +124,17 @@ func Create(cfg Config, rt http.RoundTripper) (restic.Backend, error) {
 	}
 
 	return be, nil
+}
+
+// IsAccessDenied returns true if the error is caused by Access Denied.
+func (be *Backend) IsAccessDenied(err error) bool {
+	debug.Log("IsAccessDenied(%T, %#v)", err, err)
+
+	if e, ok := errors.Cause(err).(minio.ErrorResponse); ok && e.Code == "AccessDenied" {
+		return true
+	}
+
+	return false
 }
 
 // IsNotExist returns true if the error is caused by a not existing file.
@@ -223,7 +240,7 @@ func lenForFile(f *os.File) (int64, error) {
 }
 
 // Save stores data in the backend at the handle.
-func (be *Backend) Save(ctx context.Context, h restic.Handle, rd io.Reader) (err error) {
+func (be *Backend) Save(ctx context.Context, h restic.Handle, rd restic.RewindReader) error {
 	debug.Log("Save %v", h)
 
 	if err := h.Valid(); err != nil {
@@ -235,34 +252,11 @@ func (be *Backend) Save(ctx context.Context, h restic.Handle, rd io.Reader) (err
 	be.sem.GetToken()
 	defer be.sem.ReleaseToken()
 
-	// Check key does not already exist
-	_, err = be.client.StatObject(be.cfg.Bucket, objName, minio.StatObjectOptions{})
-	if err == nil {
-		debug.Log("%v already exists", h)
-		return errors.New("key already exists")
-	}
-
-	var size int64 = -1
-
-	type lenner interface {
-		Len() int
-	}
-
-	// find size for reader
-	if f, ok := rd.(*os.File); ok {
-		size, err = lenForFile(f)
-		if err != nil {
-			return err
-		}
-	} else if l, ok := rd.(lenner); ok {
-		size = int64(l.Len())
-	}
-
 	opts := minio.PutObjectOptions{}
 	opts.ContentType = "application/octet-stream"
 
-	debug.Log("PutObject(%v, %v, %v)", be.cfg.Bucket, objName, size)
-	n, err := be.client.PutObjectWithContext(ctx, be.cfg.Bucket, objName, ioutil.NopCloser(rd), size, opts)
+	debug.Log("PutObject(%v, %v, %v)", be.cfg.Bucket, objName, rd.Length())
+	n, err := be.client.PutObjectWithContext(ctx, be.cfg.Bucket, objName, ioutil.NopCloser(rd), int64(rd.Length()), opts)
 
 	debug.Log("%v -> %v bytes, err %#v: %v", objName, n, err, err)
 
@@ -281,10 +275,13 @@ func (wr wrapReader) Close() error {
 	return err
 }
 
-// Load returns a reader that yields the contents of the file at h at the
-// given offset. If length is nonzero, only a portion of the file is
-// returned. rd must be closed after use.
-func (be *Backend) Load(ctx context.Context, h restic.Handle, length int, offset int64) (io.ReadCloser, error) {
+// Load runs fn with a reader that yields the contents of the file at h at the
+// given offset.
+func (be *Backend) Load(ctx context.Context, h restic.Handle, length int, offset int64, fn func(rd io.Reader) error) error {
+	return backend.DefaultLoad(ctx, h, length, offset, be.openReader, fn)
+}
+
+func (be *Backend) openReader(ctx context.Context, h restic.Handle, length int, offset int64) (io.ReadCloser, error) {
 	debug.Log("Load %v, length %v, offset %v from %v", h, length, offset, be.Filename(h))
 	if err := h.Valid(); err != nil {
 		return nil, err
@@ -365,7 +362,7 @@ func (be *Backend) Stat(ctx context.Context, h restic.Handle) (bi restic.FileInf
 		return restic.FileInfo{}, errors.Wrap(err, "Stat")
 	}
 
-	return restic.FileInfo{Size: fi.Size}, nil
+	return restic.FileInfo{Size: fi.Size, Name: h.Name}, nil
 }
 
 // Test returns true if a blob of the given type and name exists in the backend.
@@ -402,54 +399,59 @@ func (be *Backend) Remove(ctx context.Context, h restic.Handle) error {
 	return errors.Wrap(err, "client.RemoveObject")
 }
 
-// List returns a channel that yields all names of blobs of type t. A
-// goroutine is started for this. If the channel done is closed, sending
-// stops.
-func (be *Backend) List(ctx context.Context, t restic.FileType) <-chan string {
+// List runs fn for each file in the backend which has the type t. When an
+// error occurs (or fn returns an error), List stops and returns it.
+func (be *Backend) List(ctx context.Context, t restic.FileType, fn func(restic.FileInfo) error) error {
 	debug.Log("listing %v", t)
-	ch := make(chan string)
 
 	prefix, recursive := be.Basedir(t)
 
 	// make sure prefix ends with a slash
-	if prefix[len(prefix)-1] != '/' {
+	if !strings.HasSuffix(prefix, "/") {
 		prefix += "/"
 	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	// NB: unfortunately we can't protect this with be.sem.GetToken() here.
 	// Doing so would enable a deadlock situation (gh-1399), as ListObjects()
 	// starts its own goroutine and returns results via a channel.
 	listresp := be.client.ListObjects(be.cfg.Bucket, prefix, recursive, ctx.Done())
 
-	go func() {
-		defer close(ch)
-		for obj := range listresp {
-			m := strings.TrimPrefix(obj.Key, prefix)
-			if m == "" {
-				continue
-			}
-
-			select {
-			case ch <- path.Base(m):
-			case <-ctx.Done():
-				return
-			}
+	for obj := range listresp {
+		m := strings.TrimPrefix(obj.Key, prefix)
+		if m == "" {
+			continue
 		}
-	}()
 
-	return ch
+		fi := restic.FileInfo{
+			Name: path.Base(m),
+			Size: obj.Size,
+		}
+
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		err := fn(fi)
+		if err != nil {
+			return err
+		}
+
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+	}
+
+	return ctx.Err()
 }
 
 // Remove keys for a specified backend type.
 func (be *Backend) removeKeys(ctx context.Context, t restic.FileType) error {
-	for key := range be.List(ctx, restic.DataFile) {
-		err := be.Remove(ctx, restic.Handle{Type: restic.DataFile, Name: key})
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return be.List(ctx, restic.DataFile, func(fi restic.FileInfo) error {
+		return be.Remove(ctx, restic.Handle{Type: t, Name: fi.Name})
+	})
 }
 
 // Delete removes all restic keys in the bucket. It will not remove the bucket itself.

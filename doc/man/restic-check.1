@@ -37,6 +37,10 @@ repository and not use a local cache.
     read all data blobs
 
 .PP
+\fB\-\-read\-data\-subset\fP=""
+    read subset of data packs
+
+.PP
 \fB\-\-with\-cache\fP[=false]
     use the cache
 
@@ -49,6 +53,10 @@ repository and not use a local cache.
 .PP
 \fB\-\-cache\-dir\fP=""
     set the cache directory
+
+.PP
+\fB\-\-cleanup\-cache\fP[=false]
+    auto remove old cache directories
 
 .PP
 \fB\-\-json\fP[=false]
@@ -85,6 +93,10 @@ repository and not use a local cache.
 .PP
 \fB\-r\fP, \fB\-\-repo\fP=""
     repository to backup to or restore from (default: $RESTIC\_REPOSITORY)
+
+.PP
+\fB\-\-tls\-client\-cert\fP=""
+    path to a file containing PEM encoded TLS client certificate and private key
 
 
 .SH SEE ALSO

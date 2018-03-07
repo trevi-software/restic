@@ -1,4 +1,5 @@
 // +build !openbsd
+// +build !solaris
 // +build !windows
 
 package fuse
@@ -34,10 +35,10 @@ func cleanupNodeName(name string) string {
 }
 
 func newDir(ctx context.Context, root *Root, inode, parentInode uint64, node *restic.Node) (*dir, error) {
-	debug.Log("new dir for %v (%v)", node.Name, node.Subtree.Str())
+	debug.Log("new dir for %v (%v)", node.Name, node.Subtree)
 	tree, err := root.repo.LoadTree(ctx, *node.Subtree)
 	if err != nil {
-		debug.Log("  error loading tree %v: %v", node.Subtree.Str(), err)
+		debug.Log("  error loading tree %v: %v", node.Subtree, err)
 		return nil, err
 	}
 	items := make(map[string]*restic.Node)
@@ -74,10 +75,10 @@ func replaceSpecialNodes(ctx context.Context, repo restic.Repository, node *rest
 }
 
 func newDirFromSnapshot(ctx context.Context, root *Root, inode uint64, snapshot *restic.Snapshot) (*dir, error) {
-	debug.Log("new dir for snapshot %v (%v)", snapshot.ID().Str(), snapshot.Tree.Str())
+	debug.Log("new dir for snapshot %v (%v)", snapshot.ID(), snapshot.Tree)
 	tree, err := root.repo.LoadTree(ctx, *snapshot.Tree)
 	if err != nil {
-		debug.Log("  loadTree(%v) failed: %v", snapshot.ID().Str(), err)
+		debug.Log("  loadTree(%v) failed: %v", snapshot.ID(), err)
 		return nil, err
 	}
 	items := make(map[string]*restic.Node)
@@ -182,7 +183,6 @@ func (d *dir) Lookup(ctx context.Context, name string) (fs.Node, error) {
 	node, ok := d.items[name]
 	if !ok {
 		debug.Log("  Lookup(%v) -> not found", name)
-		debug.Log("     items: %v\n", d.items)
 		return nil, fuse.ENOENT
 	}
 	switch node.Type {

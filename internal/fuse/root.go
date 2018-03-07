@@ -1,9 +1,12 @@
 // +build !openbsd
+// +build !solaris
 // +build !windows
 
 package fuse
 
 import (
+	"time"
+
 	"github.com/restic/restic/internal/debug"
 	"github.com/restic/restic/internal/restic"
 
@@ -14,10 +17,11 @@ import (
 
 // Config holds settings for the fuse mount.
 type Config struct {
-	OwnerIsRoot bool
-	Host        string
-	Tags        []restic.TagList
-	Paths       []string
+	OwnerIsRoot      bool
+	Host             string
+	Tags             []restic.TagList
+	Paths            []string
+	SnapshotTemplate string
 }
 
 // Root is the root node of the fuse mount of a repository.
@@ -27,7 +31,9 @@ type Root struct {
 	inode         uint64
 	snapshots     restic.Snapshots
 	blobSizeCache *BlobSizeCache
-	snCount       int
+
+	snCount   int
+	lastCheck time.Time
 
 	*MetaDir
 }

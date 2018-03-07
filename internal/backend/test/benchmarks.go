@@ -14,7 +14,8 @@ func saveRandomFile(t testing.TB, be restic.Backend, length int) ([]byte, restic
 	data := test.Random(23, length)
 	id := restic.Hash(data)
 	handle := restic.Handle{Type: restic.DataFile, Name: id.String()}
-	if err := be.Save(context.TODO(), handle, bytes.NewReader(data)); err != nil {
+	err := be.Save(context.TODO(), handle, restic.NewByteReader(data))
+	if err != nil {
 		t.Fatalf("Save() error: %+v", err)
 	}
 	return data, handle
@@ -42,18 +43,13 @@ func (s *Suite) BenchmarkLoadFile(t *testing.B) {
 	t.ResetTimer()
 
 	for i := 0; i < t.N; i++ {
-		rd, err := be.Load(context.TODO(), handle, 0, 0)
+		var n int
+		err := be.Load(context.TODO(), handle, 0, 0, func(rd io.Reader) (ierr error) {
+			n, ierr = io.ReadFull(rd, buf)
+			return ierr
+		})
 		if err != nil {
 			t.Fatal(err)
-		}
-
-		n, err := io.ReadFull(rd, buf)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err = rd.Close(); err != nil {
-			t.Fatalf("Close() returned error: %v", err)
 		}
 
 		if n != length {
@@ -84,18 +80,13 @@ func (s *Suite) BenchmarkLoadPartialFile(t *testing.B) {
 	t.ResetTimer()
 
 	for i := 0; i < t.N; i++ {
-		rd, err := be.Load(context.TODO(), handle, testLength, 0)
+		var n int
+		err := be.Load(context.TODO(), handle, testLength, 0, func(rd io.Reader) (ierr error) {
+			n, ierr = io.ReadFull(rd, buf)
+			return ierr
+		})
 		if err != nil {
 			t.Fatal(err)
-		}
-
-		n, err := io.ReadFull(rd, buf)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err = rd.Close(); err != nil {
-			t.Fatalf("Close() returned error: %v", err)
 		}
 
 		if n != testLength {
@@ -128,18 +119,13 @@ func (s *Suite) BenchmarkLoadPartialFileOffset(t *testing.B) {
 	t.ResetTimer()
 
 	for i := 0; i < t.N; i++ {
-		rd, err := be.Load(context.TODO(), handle, testLength, int64(testOffset))
+		var n int
+		err := be.Load(context.TODO(), handle, testLength, int64(testOffset), func(rd io.Reader) (ierr error) {
+			n, ierr = io.ReadFull(rd, buf)
+			return ierr
+		})
 		if err != nil {
 			t.Fatal(err)
-		}
-
-		n, err := io.ReadFull(rd, buf)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err = rd.Close(); err != nil {
-			t.Fatalf("Close() returned error: %v", err)
 		}
 
 		if n != testLength {
@@ -163,16 +149,11 @@ func (s *Suite) BenchmarkSave(t *testing.B) {
 	id := restic.Hash(data)
 	handle := restic.Handle{Type: restic.DataFile, Name: id.String()}
 
-	rd := bytes.NewReader(data)
-
+	rd := restic.NewByteReader(data)
 	t.SetBytes(int64(length))
 	t.ResetTimer()
 
 	for i := 0; i < t.N; i++ {
-		if _, err := rd.Seek(0, 0); err != nil {
-			t.Fatal(err)
-		}
-
 		if err := be.Save(context.TODO(), handle, rd); err != nil {
 			t.Fatal(err)
 		}

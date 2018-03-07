@@ -182,11 +182,11 @@ type Finder struct {
 
 func (f *Finder) findInTree(ctx context.Context, treeID restic.ID, prefix string) error {
 	if f.notfound.Has(treeID) {
-		debug.Log("%v skipping tree %v, has already been checked", prefix, treeID.Str())
+		debug.Log("%v skipping tree %v, has already been checked", prefix, treeID)
 		return nil
 	}
 
-	debug.Log("%v checking tree %v\n", prefix, treeID.Str())
+	debug.Log("%v checking tree %v\n", prefix, treeID)
 
 	tree, err := f.repo.LoadTree(ctx, treeID)
 	if err != nil {
@@ -241,10 +241,7 @@ func (f *Finder) findInSnapshot(ctx context.Context, sn *restic.Snapshot) error 
 	debug.Log("searching in snapshot %s\n  for entries within [%s %s]", sn.ID(), f.pat.oldest, f.pat.newest)
 
 	f.out.newsn = sn
-	if err := f.findInTree(ctx, *sn.Tree, string(filepath.Separator)); err != nil {
-		return err
-	}
-	return nil
+	return f.findInTree(ctx, *sn.Tree, string(filepath.Separator))
 }
 
 func runFind(opts FindOptions, gopts GlobalOptions, args []string) error {

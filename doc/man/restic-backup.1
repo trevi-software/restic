@@ -76,6 +76,10 @@ given as the arguments.
 \fB\-\-time\fP=""
     time of the backup (ex. '2012\-11\-01 22:08:41') (default: now)
 
+.PP
+\fB\-\-with\-atime\fP[=false]
+    store the atime for all files and directories
+
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
 .PP
@@ -85,6 +89,10 @@ given as the arguments.
 .PP
 \fB\-\-cache\-dir\fP=""
     set the cache directory
+
+.PP
+\fB\-\-cleanup\-cache\fP[=false]
+    auto remove old cache directories
 
 .PP
 \fB\-\-json\fP[=false]
@@ -121,6 +129,10 @@ given as the arguments.
 .PP
 \fB\-r\fP, \fB\-\-repo\fP=""
     repository to backup to or restore from (default: $RESTIC\_REPOSITORY)
+
+.PP
+\fB\-\-tls\-client\-cert\fP=""
+    path to a file containing PEM encoded TLS client certificate and private key
 
 
 .SH SEE ALSO

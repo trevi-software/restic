@@ -97,6 +97,10 @@ data after 'forget' was run successfully, see the 'prune' command.
     set the cache directory
 
 .PP
+\fB\-\-cleanup\-cache\fP[=false]
+    auto remove old cache directories
+
+.PP
 \fB\-\-json\fP[=false]
     set output mode to JSON for commands that support it
 
@@ -131,6 +135,10 @@ data after 'forget' was run successfully, see the 'prune' command.
 .PP
 \fB\-r\fP, \fB\-\-repo\fP=""
     repository to backup to or restore from (default: $RESTIC\_REPOSITORY)
+
+.PP
+\fB\-\-tls\-client\-cert\fP=""
+    path to a file containing PEM encoded TLS client certificate and private key
 
 
 .SH SEE ALSO
